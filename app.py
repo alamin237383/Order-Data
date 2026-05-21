@@ -73,4 +73,96 @@ try:
             df = df[df['SO Name'] == sel_so]
 
     # 4. Top KPI Executive Scorecard
-    col1,
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_orders = len(df)
+        st.metric(label="Total Lines/Orders Ordered", value=f"{total_orders:,}")
+        
+    with col2:
+        if 'OrderDate' in df.columns and 'Outlet Code' in df.columns:
+            total_memos = df.groupby(['OrderDate', 'Outlet Code']).ngroups
+        elif 'Outlet Code' in df.columns:
+            total_memos = df['Outlet Code'].nunique()
+        else:
+            total_memos = df.iloc[:, 0].nunique()
+        st.metric(label="Total Memos Cut (Productive Memos)", value=f"{total_memos:,}")
+        
+    with col3:
+        unique_so = df['SO Name'].nunique() if 'SO Name' in df.columns else 0
+        st.metric(label="Active Sales Officers (SO)", value=f"{unique_so}")
+        
+    with col4:
+        unique_brands = 0
+        for col in df.columns:
+            if 'brand' in col.lower():
+                unique_brands = df[col].nunique()
+                break
+        st.metric(label="Total Brands Distributed", value=f"{unique_brands if unique_brands > 0 else 'N/A'}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 5. Graphical Panels (Brand-wise Analysis & Top Performers)
+    chart_col1, chart_col2 = st.columns(2)
+    
+    with chart_col1:
+        brand_column = None
+        for col in df.columns:
+            if 'brand' in col.lower():
+                brand_column = col
+                break
+                
+        if brand_column:
+            st.markdown(f"### 🏷️ Brand Wise Order Distribution")
+            brand_data = df[brand_column].value_counts().reset_index()
+            brand_data.columns = ['Brand', 'Total Orders']
+            
+            fig_brand = px.bar(brand_data, x='Total Orders', y='Brand', orientation='h',
+                               color='Total Orders', color_continuous_scale='Agsunset',
+                               labels={'Total Orders': 'Order Counts'})
+            fig_brand.update_layout(yaxis={'categoryorder':'total ascending'}, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_brand, use_container_width=True)
+        else:
+            st.info("💡 Note: To display Brand chart, ensure your dataset contains a column named 'Brand' or 'Brand Name'.")
+
+    with chart_col2:
+        if 'SO Name' in df.columns:
+            st.markdown("### 🏆 Top 10 Sales Officers (By Order Count)")
+            top_so = df['SO Name'].value_counts().head(10).reset_index()
+            top_so.columns = ['SO Name', 'Count']
+            
+            fig_so = px.bar(top_so, x='Count', y='SO Name', orientation='h',
+                            color='Count', color_continuous_scale='Blues')
+            fig_so.update_layout(yaxis={'categoryorder':'total ascending'}, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_so, use_container_width=True)
+
+    # 6. Order Timeline Flow Analytics
+    if 'OrderDate' in df.columns and not df['OrderDate'].isnull().all():
+        st.markdown("---")
+        st.markdown("### 📅 Continuous Order Load Timeline")
+        trend_df = df.groupby(df['OrderDate'].dt.date).size().reset_index()
+        trend_df.columns = ['Date', 'Orders']
+        
+        fig_trend = px.area(trend_df, x='Date', y='Orders')
+        fig_trend.update_traces(line_color='#2563EB', fillcolor='rgba(37, 99, 235, 0.1)')
+        fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+    # 7. Raw Dataset Explorer Grid & Export Command
+    st.markdown("---")
+    st.markdown("### 📋 Filtered Dataset Explorer")
+    st.dataframe(df, use_container_width=True)
+
+    # Sidebar data download export utility
+    csv_data = df.to_csv(index=False).encode('utf-8')
+    st.sidebar.markdown("---")
+    st.sidebar.download_button(
+        label="📥 Download Active Report (CSV)",
+        data=csv_data,
+        file_name="Filtered_Sales_Execution_Report.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+except Exception as e:
+    st.error(f"Operational breakdown: {e}")
